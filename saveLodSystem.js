@@ -10,6 +10,11 @@
 
 
 */
+
+/*
+  disabled folder creation! Lines changed : 54, 140, 156
+
+*/
 outlets = 5; 
 
 inlets = 1;
@@ -41,35 +46,38 @@ var defUMenuEntry = "[scn]"
 
 outlet(o_title, "set", "[empty]");
 
+
+
 function createProject(p_name, p_folder)
-{
-if(curScene.length != 0){storeScene(curScene);}
-initialize();	
+	{
+	if(curScene.length != 0){storeScene(curScene);}
+	initialize();	
 	
-projDir =  p_folder+p_name;
-projName = p_name;
+//	projDir =  p_folder+p_name;                             !!!!
+z	projDir = this.patcher.filepath;
+	projName = p_name;
 
 //post("New project " + projName + " in: " + projDir);
 
-projFile = new Dict(p_name);
-projFile.append("prjName", p_name);
+	projFile = new Dict(p_name);
+	projFile.append("prjName", p_name);
 
-shell.message("mkdir" , str_shellFormat(projDir));
-shell.message( "mkdir",  str_shellFormat(projDir+"/scenes"));
+//	shell.message("mkdir" , str_shellFormat(projDir));
+//	shell.message( "mkdir",  str_shellFormat(projDir+"/scenes"));
 
 
-outlet(o_rbfi, "setProjDir", ""+projDir);
+	outlet(o_rbfi, "setProjDir", ""+projDir);
 
-outlet(o_title, "set", projName);
+	outlet(o_title, "set", projName);
 }
 
 function saveProject()
 {
 
-if(curScene.length != 0){storeScene(curScene);}
+	if(curScene.length != 0){storeScene(curScene);}
+		
+	if(projName.length != 0){projFile.export_json(projDir+"/"+projName);}
 	
-if(projName.length != 0){projFile.export_json(projDir+"/"+projName);}
-
 
 
 } 
@@ -78,7 +86,7 @@ function openProject(fileDir)
 {
 	if(curScene.length != 0){storeScene(curScene);}
  
-
+	initialize();
 	projFile.import_json(fileDir);
 
 	projName = projFile.get("prjName");
@@ -92,7 +100,7 @@ function openProject(fileDir)
 	recallScene(projFile.get("sc_0")[0]);
 	}
 	populateUMenu(); 
-	
+	 	
  	outlet(o_title, "set", projName);
 } 
 
@@ -129,11 +137,14 @@ function recallScene(sc_name)
 		if(curScene.length != 0){storeScene(curScene);}
 		post(getSceneKeyByName(sc_name)+"\n");
 		srcBuf.send("replace", projFile.get(getSceneKeyByName(sc_name))[1]);
-		outlet(o_pattr, "read", projDir + "/scenes/"+"p_"+sc_name+".json");
-		outlet(o_rbfi, "recallScene", projDir +"/scenes/"+"r_"+sc_name+".json");
+		//outlet(o_pattr, "read", projDir + "/scenes/"+"p_"+sc_name+".json");
+		//outlet(o_rbfi, "recallScene", projDir +"/scenes/"+"r_"+sc_name+".json");
+		outlet(o_pattr, "read", projName+ "_"+"p_"+sc_name+".json");
+		outlet(o_rbfi, "recallScene", projName+ "_"+"r_"+sc_name+".json");
 		
 		curScene = sc_name;
 	}
+
 }
 function deleteScene(sc_name)
 {
@@ -141,9 +152,11 @@ function deleteScene(sc_name)
 }
 
 function storeScene(sc_name)
-{
-	outlet(o_pattr, "writejson", projDir + "/scenes/"+"p_"+sc_name);
-	outlet(o_rbfi, "saveScene", projDir + "/scenes/"+"r_"+sc_name)	;
+{                                                                           
+//	outlet(o_pattr, "writejson", projDir + "/scenes/"+"p_"+sc_name);                       !!
+//	outlet(o_rbfi, "saveScene", projDir + "/scenes/"+"r_"+sc_name)	;
+outlet(o_pattr, "writejson",  projName+ "_"+"p_"+sc_name);                       
+	outlet(o_rbfi, "saveScene", projName+ "_"+"r_"+sc_name);	;
 	// Overwrites files with same SCENE NAME
 }
 
