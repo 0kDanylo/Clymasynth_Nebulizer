@@ -1,238 +1,211 @@
-//ALWAYS KEEP IN THE TOP PARENT PATCHER!
 
+outlets = 2; 
+inlets = 2;
 
-/*DATA STRUCTURE:
-
-	FILES : 
- 			- Project File [prjName, Scene[1]{sc_name, au_path}, Scene[2]...]
-			- RBFI JSONs for each scene
-			- Pattr JSON for each scene
-
-
-*/
-
-/*
-  disabled folder creation! Lines changed : 54, 140, 156
-
-*/
-outlets = 5; 
-
-inlets = 1;
-
-
-var o_umenu = 0;
-var o_rbfi = 1;
-var o_title =2;
-var o_shell =3;
-var o_pattr =4;
-
-setoutletassist(o_umenu, "to uMenu");
-setoutletassist(o_rbfi, "to rbfiControl bpatcher");
-setoutletassist(o_title, "to text");
-setoutletassist(o_shell, "to shell");
-setoutletassist(o_pattr, "to pattr");
-
-var shell = this.patcher.getnamed("myShell");
-
-var defPresetStoragePath = "/presets";
-var curScene = "";
-var audioFilepath = "";
-var srcBuf = new Buffer("source");
-var projFile = new Dict();
-var projDir = "";
-var projName = "";
+var cursorCoord = [0,0];
+var nearestData = [];
+var candidateDistance = 1000;
+var numPoints = 0; //Do i Use it 
+var pointsRegistry = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
 var state = "idle";
-var defUMenuEntry = "[scn]"
+var sceneDir = "default";
+var projDir="";
 
-outlet(o_title, "set", "[empty]");
-
-
-
-function createProject(p_name, p_folder)
-	{
-	if(curScene.length != 0){storeScene(curScene);}
-	initialize();	
-	
-//	projDir =  p_folder+p_name;                             !!!!
-z	projDir = this.patcher.filepath;
-	projName = p_name;
-
-//post("New project " + projName + " in: " + projDir);
-
-	projFile = new Dict(p_name);
-	projFile.append("prjName", p_name);
-
-//	shell.message("mkdir" , str_shellFormat(projDir));
-//	shell.message( "mkdir",  str_shellFormat(projDir+"/scenes"));
+var rbfi = patcher.getnamed("_rbfi");
+var pStorage = patcher.getnamed("_pStorage");
 
 
-	outlet(o_rbfi, "setProjDir", ""+projDir);
+init();
+function init(){
 
-	outlet(o_title, "set", projName);
+rbfi.message("clear");
+rbfi.message("move", 0.5, 0.5);
 }
-
-function saveProject()
+function mouse(a, b)
 {
-
-	if(curScene.length != 0){storeScene(curScene);}
-		
-	if(projName.length != 0){projFile.export_json(projDir+"/"+projName);}
-	
-
-
-} 
-	
-function openProject(fileDir)
-{
-	if(curScene.length != 0){storeScene(curScene);}
- 
-	initialize();
-	projFile.import_json(fileDir);
-
-	projName = projFile.get("prjName");
-	projDir = extractPath(fileDir);
-	
-	
-	post("Open project " + projName + " in:" + projDir);
-
-	outlet(o_rbfi, "setProjDir", projDir); 
-	if(projFile.contains("sc_0")){
-	recallScene(projFile.get("sc_0")[0]);
-	}
-	populateUMenu(); 
-	 	
- 	outlet(o_title, "set", projName);
-} 
-
-function newScene(au_Path)
-{
-	
-if(curScene.length > 0){storeScene(curScene)};
-	
-	outlet(o_rbfi, "clear");
-	outlet(o_pattr, "clear");
-	var i = 0;
-	while(projFile.contains("sc_"+i))
+	if(a == "mouseup")
 	{
-		i++;
+		findNearest();
 	}
-
-	srcBuf.send("replace", au_Path);
-	projFile.append("sc_"+i, extractFileName(au_Path), au_Path );
-	
-	curScene = extractFileName(au_Path)
-	outlet(o_umenu, "append", curScene);
-	outlet(o_umenu, "set", curScene);
-}
-
-function recallScene(sc_name)
-{	
-	
-	if(sc_name == defUMenuEntry && sc_name == curScene )
+	else if(a == "mousedown")
 	{
-			if(curScene.length != 0){storeScene(curScene);}
+		findNearest();
 	}
 	else
 	{
-		if(curScene.length != 0){storeScene(curScene);}
-		post(getSceneKeyByName(sc_name)+"\n");
-		srcBuf.send("replace", projFile.get(getSceneKeyByName(sc_name))[1]);
-		//outlet(o_pattr, "read", projDir + "/scenes/"+"p_"+sc_name+".json");
-		//outlet(o_rbfi, "recallScene", projDir +"/scenes/"+"r_"+sc_name+".json");
-		outlet(o_pattr, "read", projName+ "_"+"p_"+sc_name+".json");
-		outlet(o_rbfi, "recallScene", projName+ "_"+"r_"+sc_name+".json");
+		cursorCoord = [a,b];
+	}	
+}
+
+function dumpCatch(skipa, skipb, pName, skipc, x, y, skipd, r,g,b, skipe, radiusIn, skipf, radiusOut)
+{
+  if(state == "searchNearest")
+	{
 		
-		curScene = sc_name;
-	}
-
-}
-function deleteScene(sc_name)
-{
-// by now - only by hand
-}
-
-function storeScene(sc_name)
-{                                                                           
-//	outlet(o_pattr, "writejson", projDir + "/scenes/"+"p_"+sc_name);                       !!
-//	outlet(o_rbfi, "saveScene", projDir + "/scenes/"+"r_"+sc_name)	;
-outlet(o_pattr, "writejson",  projName+ "_"+"p_"+sc_name);                       
-	outlet(o_rbfi, "saveScene", projName+ "_"+"r_"+sc_name);	;
-	// Overwrites files with same SCENE NAME
-}
-
-function getSceneKeyByName(sc_name)
-{
-	for(i = 0; i< projFile.getkeys().length; i++)
-	{
-	 if(projFile.get("sc_"+i)[0] == sc_name) {post ("sc_"+i);return ("sc_"+i);}  
-		else{post("sc_name "+sc_name+"was not found in project " + projName);}
-	}
-}
-	
-	
-function populateUMenu()
-{
-	outlet(o_umenu, "clear");
-	outlet(o_umenu, "append", defUMenuEntry);
-	for(i = 0; i<projFile.getkeys().length; i++)
-	{	
-		var key = "sc_"+i;
-		if(projFile.contains(key))
-		{
-			outlet(o_umenu, "append", projFile.get(key)[0]);
+		if(skipa == "done")
+		{			
+			outlet(0, "nearestPreset",  nearestData);
+			state = "idle"; 
+			return;			
 		}
+	
+    	var	currentDistance = ((cursorCoord[0]-x)*(cursorCoord[0]-x))+((cursorCoord[1]-y)*(cursorCoord[1]-y));
+		var check = Math.sqrt(currentDistance)
+		
+		
+		if(currentDistance<candidateDistance)
+		{
+			candidateDistance = currentDistance;
+			nearestData = [skipa, skipb, pName, skipc, x, y, skipd, r,g,b, skipe, radiusIn, skipf, radiusOut];			
+		}
+	}	
+	else if(state == "getNumPoints")
+	{
+			numPoints = skipb;
+		//	post("\n nPoints: ", numPoints);
+			state = "idle";
+	}
+	else if(state == "saving")
+	{
+		
+		if(skipa == "done")
+		{			
+		//	outlet(0, "toColl",  "write", ""+patcher.this.filepath+"/"+scene+".txt");
+			outlet(0, "toColl", "write", sceneDir+".json");
+		
+		// pattr command removed. It's now beeing sent from saveLoadSystem.js
+			state = "idle"; 
+			return;			
+		}
+	
+    	
+		outlet(0, "toColl","store", skipa, skipb, ""+pName, skipc, x, y, skipd, r,g,b, skipe, radiusIn, skipf, radiusOut);
+	}
+	else if(state == "refreshRegistry")
+	{
+			if(skipa == "done")
+			{
+				state = "idle";
+			}
+			else
+			{	
+				var str = pName;
+				var res = "";
+	
+				for(i=0; i<str.length; i++)
+				{
+					if(str.charCodeAt(i) >= 48 && str.charCodeAt(i)  <= 57 )
+					{
+						res = res+str.charAt(i);
+	
+					}
+
+				}
+				//post ("pr positive at index:", i )
+				pointsRegistry[parseInt(res)]=1;
+			}
 	}
 
 }
+function findNearest()
+{	
+	nearestData = [];
+	state = "searchNearest"
+	candidateDistance = 1000;
+	rbfi.message("dump");
+}
+function store()
 
-function initialize()
-{
+{		
+		var slot  = parseInt(nearestData[2].replace("/", ""))+1
+	   // outlet(1, "delete", slot);
+
+		outlet(1, "store", slot);
+		outlet(1, "getslotlist"); // refreshes the correnpondence of preset number to the weights output order (see "p formatWeights")
 	
-	outlet(o_rbfi, "clear");
-	outlet(o_pattr, "clear");
-	outlet(o_umenu, "clear");
-	srcBuf.send("clear");
-	curScene = "";
-	
-	outlet(o_umenu, "append", defUMenuEntry);		
 }
 
-function shellDone(sh_out)
-{
-	switch(sh_out)
-	{
-	case "mkdir": saveProject(); break;
-	default: break;
-	}// reacting to shell doing thins
-}
+function addPoint()
+{	
+	getNumPoints(); 
+	var slot = findVacantSlot();
 	
-function extractExtention(path)
-{}
+	pointsRegistry[slot] = 1;
+
+	outlet(1, "store", slot+1);
+
+	outlet(1, "getslotlist");
+
+	rbfi.message("add_point", "name", "/"+(slot), "coords", cursorCoord, "rgb", 0.5, 0.5, 0.5);
+	getNumPoints();
+	findNearest();
+}
+
+function deletePoint()
+{	
+	var slot = parseInt(nearestData[2].replace("/", ""));
+
+	outlet(1,"delete", slot+1);
+	outlet(1, "getslotlist");
+	rbfi.message("delete_point", nearestData[2]);
+	pointsRegistry[slot] = 0;
+	getNumPoints();
+	findNearest();
+}
+function getNumPoints()
+{	
+
+	state = "getNumPoints"
+	rbfi.message("getnumpoints");	
+} 
+function findVacantSlot()
+{
+	var i = 0;
+	for(i = 0; i <= pointsRegistry.length; i+=1)
+	{ 
+		if(pointsRegistry[i] == 0)
+		{ 	
+			return i;		
+		}
+		if(i==pointsRegistry.length && pointsRegistry[i] == 0)
+		{
+			return i+1;		
+		}						
+	}	
+	
+}
+function refreshRegistry()
+{
+ pointsRegistry = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+state = "refreshRegistry";
+rbfi.message("dump");	
+} 
 
 
+function clear()
+{
+		outlet(1,"clear");
+		rbfi.message("clear");
+		rbfi.message("move", 0.5, 0.5);
+}
+
+function saveScene(sc_dir)
+{
+	state = "saving";
+	sceneDir = sc_dir;
+	outlet(0, "toColl", "clear");
+	rbfi.message("dump");	
+}
+function recallScene(sc_dir)
+{
+	rbfi.message("clear");
+	outlet(0, "toColl", "read", sc_dir);
+	rbfi.message("move", 0.5, 0.5);
+	findNearest();
+}
+
+function setProjDir(dir)
+{
+	projDir = dir;
 	
-function str_indexOfLast(str, ch)	
-{
-	var index = -1;
-	for(i =0; i<str.length; i++) { if(str.charCodeAt(i) == ch.charCodeAt(0)) { index = i; } }
-	return index;
-}
-function extractFileName(path)
-{
-	var res =  path;
-	res = res.substring(str_indexOfLast(path, "/")+1, res.length);
-	return res;
-}
-function extractPath(path)
-{
-	var res =  path;
-	res = res.substring(0,str_indexOfLast(path, "/"));
-	return res;
-}
-function str_shellFormat(str)
-{
-if(str != str.replace(" ", "")) { return str;}
-	else{
-return "\""+str+"\"";
-}
 }
